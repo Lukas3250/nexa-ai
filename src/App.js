@@ -1,6 +1,8 @@
 import "./App.css";
 import { useRef, useState } from "react";
 
+const API_URL = "https://nexa-ai-3iyw.onrender.com";
+
 function App() {
   const [message, setMessage] = useState("");
   const [answer, setAnswer] = useState("");
@@ -58,6 +60,7 @@ function App() {
 
   const showHistory = () => {
     if (history.length === 0) {
+      setGeneratedImage("");
       setAnswer("História je prázdna.");
       return;
     }
@@ -65,10 +68,7 @@ function App() {
     const formatted = history
       .map(
         (item) =>
-          `[${item.time}]
-Otázka: ${item.question}
-
-Odpoveď: ${item.answer}`
+          `[${item.time}]\nOtázka: ${item.question}\n\nOdpoveď: ${item.answer}`
       )
       .join("\n\n----------------------\n\n");
 
@@ -82,7 +82,7 @@ Odpoveď: ${item.answer}`
       setIsSpeaking(true);
       setStatus("HOVORÍM");
 
-      const response = await fetch("http://localhost:3001/speak", {
+      const response = await fetch(`${API_URL}/speak`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -128,9 +128,7 @@ Odpoveď: ${item.answer}`
         }
       };
 
-      audio.onplay = () => {
-        animateMouth();
-      };
+      audio.onplay = animateMouth;
 
       audio.onended = () => {
         isSpeakingRef.current = false;
@@ -164,7 +162,7 @@ Odpoveď: ${item.answer}`
     setGeneratedImage("");
 
     try {
-      const response = await fetch("http://localhost:3001/ask", {
+      const response = await fetch(`${API_URL}/ask`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -182,6 +180,7 @@ Odpoveď: ${item.answer}`
       }
 
       const data = await response.json();
+
       const finalAnswer =
         data.answer || "Technológia opäť zažila emocionálny kolaps.";
 
@@ -221,7 +220,7 @@ Odpoveď: ${item.answer}`
     setAnswer("Generujem obrázok...");
 
     try {
-      const response = await fetch("http://localhost:3001/generate-image", {
+      const response = await fetch(`${API_URL}/generate-image`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -230,6 +229,10 @@ Odpoveď: ${item.answer}`
           prompt: message,
         }),
       });
+
+      if (!response.ok) {
+        throw new Error("Image backend error");
+      }
 
       const data = await response.json();
 
@@ -287,7 +290,6 @@ Odpoveď: ${item.answer}`
       if (isSpeakingRef.current || isLoadingRef.current) return;
 
       const text = event.results[0][0].transcript.trim();
-
       if (!text) return;
 
       setMessage(text);
@@ -382,7 +384,7 @@ Odpoveď: ${item.answer}`
         <div className="statusBox">
           <div className="online">● {status}</div>
           <p>NEXA AI</p>
-          <small>v3.3</small>
+          <small>v3.4</small>
         </div>
       </aside>
 
@@ -418,21 +420,19 @@ Odpoveď: ${item.answer}`
             <img src="/nexa-icon.png" alt="Nexa" className="smallLogo" />
 
             <div className="aiBubble">
-  <div className="aiText">
-    {answer && answer.length > 0
-      ? answer
-      : "Čakám na problém. Dúfam, že nebude typu „nič som nemenil“."}
-  </div>
+              <div className="aiText">
+                {answer && answer.length > 0
+                  ? answer
+                  : "Čakám na problém. Dúfam, že nebude typu „nič som nemenil“."}
+              </div>
 
-  {generatedImage && (
-    <img
-      src={generatedImage}
-      alt="AI generated"
-      className="generatedImage"
-    />
-  )}
-
-             
+              {generatedImage && (
+                <img
+                  src={generatedImage}
+                  alt="AI generated"
+                  className="generatedImage"
+                />
+              )}
             </div>
           </div>
         </section>
