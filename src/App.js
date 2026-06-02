@@ -367,7 +367,7 @@ function App() {
           </button>
 
 
-        <button className="nav" onClick={saveMemory}>
+          <button className="nav" onClick={saveMemory}>
            💾 Pamäť
           </button>
 
@@ -477,7 +477,9 @@ function App() {
           <button onClick={toggleListening}>
             {isListening ? "⏹ Stop" : "🎤 Počúvať"}
           </button>
-
+          <button onClick={saveMemory}>
+           💾 Pamäť
+          </button>
           <button onClick={() => askAI()}>Odoslať</button>
 
           <button onClick={generateImage}>🎨 Obrázok</button>
