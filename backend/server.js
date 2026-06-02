@@ -13,9 +13,13 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-app.post("/ask", async (req, res) => {
-  try {
-    const { message, humor = 60, sarcasm = 40, precision = 95 } = req.body;
+const {
+  message,
+  humor = 60,
+  sarcasm = 40,
+  precision = 95,
+  memory = "",
+} = req.body;
 
     const response = await client.responses.create({
       model: "gpt-4.1-mini",
@@ -54,6 +58,9 @@ Nastavenia:
 Humor: ${humor}%
 Sarkazmus: ${sarcasm}%
 Presnosť: ${precision}%
+Pamäť používateľa:
+${memory}
+
 `,
         },
         {
