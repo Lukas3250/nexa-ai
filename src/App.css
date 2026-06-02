@@ -499,6 +499,8 @@ button:active {
 }
 
 .sidebar {
+  width: 280px;
+  min-width: 280px;
   max-height: calc(100vh - 24px);
   overflow-y: auto;
   padding: 16px;
