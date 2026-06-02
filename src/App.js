@@ -363,7 +363,7 @@ function App() {
 
         <nav>
           <button className="nav active" onClick={newChat}>
-            ✨ Nový chat
+            ✨  test Nový chat
           </button>
 
 
