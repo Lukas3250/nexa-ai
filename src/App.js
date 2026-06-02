@@ -17,6 +17,9 @@ function App() {
   const [humor, setHumor] = useState(60);
   const [sarcasm, setSarcasm] = useState(40);
   const [precision, setPrecision] = useState(95);
+  const [memory, setMemory] = useState(() => {
+  return localStorage.getItem("nexa_memory") || "";
+});
 
   const recognitionRef = useRef(null);
   const audioRef = useRef(null);
@@ -57,6 +60,18 @@ function App() {
     setAnswer("");
     setGeneratedImage("");
   };
+  const saveMemory = () => {
+  const newMemory = prompt("Čo si má Nexa zapamätať?");
+
+  if (!newMemory) return;
+
+  const updatedMemory = memory + "\n- " + newMemory;
+
+  localStorage.setItem("nexa_memory", updatedMemory);
+  setMemory(updatedMemory);
+
+  setAnswer("Zapamätané.");
+};
 
   const showHistory = () => {
     if (history.length === 0) {
@@ -100,7 +115,7 @@ function App() {
 
       audioRef.current = audio;
 
-      const audioContext = new AudioContext();
+     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const source = audioContext.createMediaElementSource(audio);
       const analyser = audioContext.createAnalyser();
 
@@ -167,13 +182,13 @@ function App() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          message: text,
-          humor,
-          sarcasm,
-          precision,
-        }),
-      });
+       body: JSON.stringify({
+  message: text,
+  humor,
+  sarcasm,
+  precision,
+  memory: localStorage.getItem("nexa_memory") || "",
+}),
 
       if (!response.ok) {
         throw new Error("Backend error");
@@ -266,7 +281,10 @@ function App() {
   const startRecognition = () => {
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
-
+     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert("Mikrofón nie je podporovaný.");
+      return;
+    }
     if (!SpeechRecognition) {
       alert("Použi Chrome.");
       return;
@@ -318,18 +336,25 @@ function App() {
     }
   };
 
-  const toggleListening = () => {
-    if (shouldListenRef.current) {
-      stopAll();
-      return;
-    }
+  const toggleListening = async () => {
+  if (shouldListenRef.current) {
+    stopAll();
+    return;
+  }
 
-    shouldListenRef.current = true;
-    setIsListening(true);
-    setStatus("POČÚVAM");
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    alert("Povoľ mikrofón.");
+    return;
+  }
 
-    startRecognition();
-  };
+  shouldListenRef.current = true;
+  setIsListening(true);
+  setStatus("POČÚVAM");
+
+  startRecognition();
+};
 
   return (
     <div className="app">
@@ -339,6 +364,11 @@ function App() {
         <nav>
           <button className="nav active" onClick={newChat}>
             ✨ Nový chat
+          </button>
+
+
+        <button className="nav" onClick={saveMemory}>
+           💾 Pamäť
           </button>
 
           <button className="nav">⚙ Nastavenie</button>
