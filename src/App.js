@@ -329,6 +329,7 @@ if (
 
 setMessage(text);
 await askAI(text);
+};
 
     recognition.onerror = (event) => {
       console.log("Chyba mikrofónu:", event.error);
