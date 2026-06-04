@@ -177,7 +177,7 @@ function App() {
     setGeneratedImage("");
 
     try {
-      const response = await fetch(`${API_URL}/ask`, {
+      const response = await fetch(`{API_URL}/ask`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -188,8 +188,8 @@ function App() {
   sarcasm,
   precision,
   memory: localStorage.getItem("nexa_memory") || "",
-}),
-
+  }),
+});
       if (!response.ok) {
         throw new Error("Backend error");
       }
