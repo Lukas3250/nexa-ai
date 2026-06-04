@@ -312,12 +312,23 @@ function App() {
     recognition.onresult = async (event) => {
       if (isSpeakingRef.current || isLoadingRef.current) return;
 
-      const text = event.results[0][0].transcript.trim();
-      if (!text) return;
+     const text = event.results[0][0].transcript.trim();
+if (!text) return;
 
-      setMessage(text);
-      await askAI(text);
-    };
+const lowerText = text.toLowerCase();
+
+if (
+  lowerText.includes("hej nexa") ||
+  lowerText.includes("hey nexa")
+) {
+  setMessage(text);
+  setAnswer("Čo zas nevíš?");
+  await speak("Čo zas nevíš?");
+  return;
+}
+
+setMessage(text);
+await askAI(text);
 
     recognition.onerror = (event) => {
       console.log("Chyba mikrofónu:", event.error);
