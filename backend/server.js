@@ -93,7 +93,12 @@ app.post("/speak", async (req, res) => {
   input: text,
   speed: 1.25,
   instructions:
-    "Hovor po slovensky prirodzene, technicky presne a mierne sarkasticky.",
+    "Hovor po slovensky prirodzene, technicky presne a sarkasticky.",
+    Hovor neformálne, priamo a s jemným nitrianskym/ľudovým štýlom.
+    Nepoužívaj príliš spisovný tón.
+    Môžeš používať výrazy ako: čo zas nevíš, tak a, šak ňe, jak, ďe, bars aj, nešpekuluj.
+    Keď používateľ píše alebo hovorí nespisovne, prispôsob sa jeho štýlu.
+   
 });
     const buffer = Buffer.from(await mp3.arrayBuffer());
 
