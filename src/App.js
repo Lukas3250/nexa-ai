@@ -310,25 +310,29 @@ function App() {
     recognition.maxAlternatives = 1;
 
     recognition.onresult = async (event) => {
-      if (isSpeakingRef.current || isLoadingRef.current) return;
+  const text = event.results[0][0].transcript.trim();
+  if (!text) return;
 
-     const text = event.results[0][0].transcript.trim();
-if (!text) return;
+  const lowerText = text.toLowerCase();
 
-const lowerText = text.toLowerCase();
+  if (
+    lowerText.includes("nexa") ||
+    lowerText.includes("neksa") ||
+    lowerText.includes("nexu") ||
+    lowerText.includes("hej nexa") ||
+    lowerText.includes("hey nexa")
+  ) {
+    stopAll();
+    setMessage(text);
+    setAnswer("Čo zas nevieš?");
+    await speak("Čo zas nevieš?");
+    return;
+  }
 
-if (
-  lowerText.includes("hej nexa") ||
-  lowerText.includes("hey nexa")
-) {
+  if (isSpeakingRef.current || isLoadingRef.current) return;
+
   setMessage(text);
-  setAnswer("Čo zas nevíš?");
-  await speak("Čo zas nevíš?");
-  return;
-}
-
-setMessage(text);
-await askAI(text);
+  await askAI(text);
 };
 
     recognition.onerror = (event) => {
