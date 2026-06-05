@@ -7,60 +7,63 @@ const OpenAI = require("openai");
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const {
-  message,
-  humor = 60,
-  sarcasm = 40,
-  precision = 95,
-  memory = "",
-} = req.body;
+app.post("/ask", async (req, res) => {
+  try {
+    const {
+      message,
+      humor = 60,
+      sarcasm = 40,
+      precision = 95,
+      memory = "",
+    } = req.body;
 
     const response = await client.responses.create({
       model: "gpt-4.1-mini",
+
       tools: [
         {
           type: "web_search",
           search_context_size: "medium",
         },
       ],
+
       tool_choice: "auto",
+
       input: [
         {
           role: "system",
           content: `
 Voláš sa Nexa.
 
-Si presná technická AI asistentka. Odpovedáš po slovensky.
+Si inteligentná technická AI asistentka.
+Rozprávaš po slovensky NESPISOVNE a prirodzene.
 
-Priorita číslo 1 je správnosť.
+Používaj normálny ľudový štýl:
+- čo zas nevíš
+- šak
+- nešpekuluj
+- jak
+- ďe
+- bars aj
 
-Používaj webové overovanie hlavne vtedy, keď:
-- ide o aktuálne informácie
-- ide o technickú dokumentáciu
-- ide o verzie knižníc, frameworkov alebo API
-- používateľ sa pýta na chybu, ktorú treba overiť
-- si nie si istá odpoveďou
+Keď používateľ píše nespisovne,
+odpovedaj podobne.
 
-Pravidlá:
-- Nehádaj si fakty.
-- Keď si nie si istá, povedz to.
-- Pri technických problémoch daj konkrétne kroky.
-- Ak používaš web, zhrň overené informácie.
-- Nepíš zbytočne dlhé odpovede.
+Buď technicky presná,
+ale nehovor príliš formálne.
 
-Nastavenia:
 Humor: ${humor}%
 Sarkazmus: ${sarcasm}%
 Presnosť: ${precision}%
-Pamäť používateľa:
-${memory}
 
+Pamäť:
+${memory}
 `,
         },
         {
@@ -71,14 +74,13 @@ ${memory}
     });
 
     res.json({
-      answer: response.output_text || "Nedostala som odpoveď.",
+      answer: response.output_text || "Neviem čo chceš zas.",
     });
   } catch (error) {
     console.log(error);
 
     res.json({
-      answer:
-        "Chyba pri webovom overovaní alebo komunikácii s AI. Skontroluj backend, API kľúč alebo kredit.",
+      answer: "Dakde nastala chyba. Skontroluj backend alebo API.",
     });
   }
 });
@@ -87,19 +89,19 @@ app.post("/speak", async (req, res) => {
   try {
     const { text } = req.body;
 
-   const mp3 = await client.audio.speech.create({
-  model: "gpt-4o-mini-tts",
-  voice: "nova",
-  input: text,
-  speed: 1.25,
-  instructions:
-    "Hovor po slovensky prirodzene, technicky presne a sarkasticky.",
-    Hovor neformálne, priamo a s jemným nitrianskym/ľudovým štýlom.
-    Nepoužívaj príliš spisovný tón.
-    Môžeš používať výrazy ako: čo zas nevíš, tak a, šak ňe, jak, ďe, bars aj, nešpekuluj.
-    Keď používateľ píše alebo hovorí nespisovne, prispôsob sa jeho štýlu.
-   
-});
+    const mp3 = await client.audio.speech.create({
+      model: "gpt-4o-mini-tts",
+      voice: "nova",
+      input: text,
+      speed: 1.15,
+      instructions: `
+Hovor po slovensky prirodzene.
+Používaj nespisovný štýl.
+Buď mierne sarkastická.
+Nehovor príliš formálne.
+`,
+    });
+
     const buffer = Buffer.from(await mp3.arrayBuffer());
 
     res.set({
@@ -110,16 +112,17 @@ app.post("/speak", async (req, res) => {
     res.send(buffer);
   } catch (error) {
     console.log(error);
-    res.status(500).send("Chyba pri vytváraní hlasu.");
+    res.status(500).send("Chyba hlasu.");
   }
 });
+
 app.post("/generate-image", async (req, res) => {
   try {
     const { prompt } = req.body;
 
     const image = await client.images.generate({
       model: "gpt-image-1",
-      prompt: prompt,
+      prompt,
       size: "1024x1024",
     });
 
@@ -130,10 +133,55 @@ app.post("/generate-image", async (req, res) => {
     console.log(error);
 
     res.json({
-      error: "Nepodarilo sa vygenerovať obrázok.",
+      error: "Obrázok sa nepodarilo vytvoriť.",
     });
   }
 });
+
+app.post("/vision", async (req, res) => {
+  try {
+    const { image, question } = req.body;
+
+    if (!image) {
+      return res.status(400).json({
+        error: "Chýba obrázok.",
+      });
+    }
+
+    const response = await client.responses.create({
+      model: "gpt-4.1-mini",
+
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text:
+                question ||
+                "Popíš čo vidíš na obrázku po slovensky stručne.",
+            },
+            {
+              type: "input_image",
+              image_url: image,
+            },
+          ],
+        },
+      ],
+    });
+
+    res.json({
+      answer: response.output_text,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      error: "Vision chyba.",
+    });
+  }
+});
+
 app.listen(3001, () => {
-  console.log("Server running on port 3001");
+  console.log("Nexa backend beží na porte 3001");
 });
