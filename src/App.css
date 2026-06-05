@@ -175,6 +175,7 @@ h1 {
 .inputArea {
   margin-top: 25px;
   display: flex;
+  flex-wrap: wrap;
   gap: 14px;
 }
 
@@ -191,10 +192,9 @@ h1 {
 .inputArea button {
   border: none;
   border-radius: 14px;
-  padding: 0 24px;
-  font-size: 17px;
-  cursor: pointer;
-  color: white;
+  min-width: 140px;
+  padding: 14px 18px;
+  white-space: nowrap;
 }
 
 .mic {
@@ -728,4 +728,11 @@ h1 {
     border-radius: 22px;
   }
 
+}
+.inputArea {
+  margin-top: 25px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  overflow: visible;
 }
