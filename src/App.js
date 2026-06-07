@@ -367,8 +367,12 @@ ${data.checks.mistral}
           const data = await response.json();
 
           if (data.answer) {
-            setAnswer(data.answer);
-          }
+  setAnswer(data.answer);
+
+  if (!isSpeakingRef.current) {
+    await speak(data.answer);
+  }
+}
         } catch (error) {
           console.log("Vision chyba:", error);
         }
