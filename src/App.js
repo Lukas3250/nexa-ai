@@ -453,7 +453,7 @@ function App() {
 
         <nav>
           <button className="nav active" onClick={newChat}>
-            ✨ test Nový chat
+            ✨ Nový chat
           </button>
 
           <button className="nav" onClick={saveMemory}>
