@@ -220,6 +220,7 @@ ${data.checks.mistral}
 }
       setAnswer(finalAnswer + checksText);
 
+      
       setHistory((prev) => [
         {
           question: text,
@@ -297,7 +298,56 @@ ${data.checks.mistral}
     setIsLoading(false);
   };
 
-  const analyzeCamera = async () => {
+ const analyzeCamera = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+    });
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.play();
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    setAnswer("📷 Nexa pozerá cez kameru...");
+
+    const interval = setInterval(async () => {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      ctx.drawImage(video, 0, 0);
+
+      const image = canvas.toDataURL("image/jpeg");
+
+      const response = await fetch(
+        "https://TVOJ-BACKEND.onrender.com/vision",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            image,
+            question:
+              "Stručne povedz čo vidíš. Ak sa niečo mení, povedz to.",
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      setAnswer(data.answer);
+    }, 4000);
+
+    window.cameraInterval = interval;
+
+  } catch (error) {
+    console.log(error);
+    setAnswer("Kamera zlyhala.");
+  }
+};
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
@@ -486,7 +536,17 @@ ${data.checks.mistral}
           </button>
 
           <button className="nav">ℹ O Nexe</button>
-        </nav>
+
+          <button
+                  className="action"
+                   onClick={() => {
+                    clearInterval(window.cameraInterval);
+                    setAnswer("📷 Kamera zastavená.");
+                   }}
+                   >
+                    Zastaviť kameru
+                  </button>
+                  </nav>
 
         <div className="settingsPanel">
           <h3>Nastavenia AI</h3>
