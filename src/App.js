@@ -201,8 +201,24 @@ function App() {
 
       const finalAnswer =
         data.answer || "Technológia opäť zažila emocionálny kolaps.";
+let checksText = "";
 
-      setAnswer(finalAnswer);
+if (data.checks) {
+  checksText = `
+
+-------------------
+
+🟢 Gemini:
+${data.checks.gemini}
+
+🔵 DeepSeek:
+${data.checks.deepseek}
+
+🟣 Mistral:
+${data.checks.mistral}
+`;
+}
+      setAnswer(finalAnswer + checksText);
 
       setHistory((prev) => [
         {
