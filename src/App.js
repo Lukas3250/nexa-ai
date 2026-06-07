@@ -281,6 +281,75 @@ function App() {
     setIsLoading(false);
   };
 
+  const analyzeCamera = async () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.capture = "environment";
+
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+
+      reader.onloadend = async () => {
+        const base64Image = reader.result;
+
+        setStatus("POZERÁM");
+        setIsLoading(true);
+        setGeneratedImage(base64Image);
+        setAnswer("Pozerám sa na obrázok...");
+
+        try {
+          const response = await fetch(`${API_URL}/vision`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              image: base64Image,
+              question: message || "Čo vidíš?",
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Vision backend error");
+          }
+
+          const data = await response.json();
+          const finalAnswer =
+            data.answer || data.error || "Neviem rozoznať obrázok.";
+
+          setAnswer(finalAnswer);
+          setStatus("ONLINE");
+
+          setHistory((prev) => [
+            {
+              question: message || "Kamera",
+              answer: finalAnswer,
+              image: base64Image,
+              time: new Date().toLocaleTimeString(),
+            },
+            ...prev,
+          ]);
+
+          await speak(finalAnswer);
+        } catch (error) {
+          console.log("Vision chyba:", error);
+          setStatus("CHYBA");
+          setAnswer("Chyba pri rozpoznávaní obrazu.");
+        }
+
+        setIsLoading(false);
+      };
+
+      reader.readAsDataURL(file);
+    };
+
+    input.click();
+  };
+
   const startRecognition = () => {
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -310,30 +379,30 @@ function App() {
     recognition.maxAlternatives = 1;
 
     recognition.onresult = async (event) => {
-  const text = event.results[0][0].transcript.trim();
-  if (!text) return;
+      const text = event.results[0][0].transcript.trim();
+      if (!text) return;
 
-  const lowerText = text.toLowerCase();
+      const lowerText = text.toLowerCase();
 
-  if (
-    lowerText.includes("nexa") ||
-    lowerText.includes("neksa") ||
-    lowerText.includes("nexu") ||
-    lowerText.includes("hej nexa") ||
-    lowerText.includes("hey nexa")
-  ) {
-    stopAll();
-    setMessage(text);
-    setAnswer("Čo zas nevieš?");
-    await speak("Čo zas nevieš?");
-    return;
-  }
+      if (
+        lowerText.includes("nexa") ||
+        lowerText.includes("neksa") ||
+        lowerText.includes("nexu") ||
+        lowerText.includes("hej nexa") ||
+        lowerText.includes("hey nexa")
+      ) {
+        stopAll();
+        setMessage(text);
+        setAnswer("Čo zas nevíš?");
+        await speak("Čo zas nevíš?");
+        return;
+      }
 
-  if (isSpeakingRef.current || isLoadingRef.current) return;
+      if (isSpeakingRef.current || isLoadingRef.current) return;
 
-  setMessage(text);
-  await askAI(text);
-};
+      setMessage(text);
+      await askAI(text);
+    };
 
     recognition.onerror = (event) => {
       console.log("Chyba mikrofónu:", event.error);
@@ -384,13 +453,16 @@ function App() {
 
         <nav>
           <button className="nav active" onClick={newChat}>
-            ✨ Nový chat
+            ✨ test Nový chat
           </button>
 
           <button className="nav" onClick={saveMemory}>
             💾 Pamäť
           </button>
-
+          <button className="nav" onClick={analyzeCamera}>
+            📷 Kamera
+          </button>
+         
           <button className="nav">⚙ Nastavenie</button>
 
           <button className="nav" onClick={showHistory}>
@@ -434,7 +506,7 @@ function App() {
         <div className="statusBox">
           <div className="online">● {status}</div>
           <p>NEXA AI</p>
-          <small>v3.4</small>
+          <small>v3.5</small>
         </div>
       </aside>
 
@@ -501,6 +573,8 @@ function App() {
           <button onClick={() => askAI()}>Odoslať</button>
 
           <button onClick={generateImage}>🎨 Obrázok</button>
+
+          <button onClick={analyzeCamera}>📷 Kamera</button>
 
           <button onClick={saveMemory}>💾 Pamäť</button>
 
