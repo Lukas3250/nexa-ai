@@ -45,6 +45,16 @@ function App() {
       audioRef.current = null;
     }
 
+    if (window.cameraInterval) {
+      clearInterval(window.cameraInterval);
+      window.cameraInterval = null;
+    }
+
+    if (window.cameraStream) {
+      window.cameraStream.getTracks().forEach((track) => track.stop());
+      window.cameraStream = null;
+    }
+
     isSpeakingRef.current = false;
     isLoadingRef.current = false;
 
@@ -201,10 +211,11 @@ function App() {
 
       const finalAnswer =
         data.answer || "Technológia opäť zažila emocionálny kolaps.";
-let checksText = "";
 
-if (data.checks) {
-  checksText = `
+      let checksText = "";
+
+      if (data.checks) {
+        checksText = `
 
 -------------------
 
@@ -217,10 +228,10 @@ ${data.checks.deepseek}
 🟣 Mistral:
 ${data.checks.mistral}
 `;
-}
+      }
+
       setAnswer(finalAnswer + checksText);
 
-      
       setHistory((prev) => [
         {
           question: text,
@@ -298,74 +309,46 @@ ${data.checks.mistral}
     setIsLoading(false);
   };
 
- const analyzeCamera = async () => {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-    });
+  const analyzeCamera = async () => {
+    try {
+      if (window.cameraInterval) {
+        clearInterval(window.cameraInterval);
+        window.cameraInterval = null;
+      }
 
-    const video = document.createElement("video");
-    video.srcObject = stream;
-    video.play();
+      if (window.cameraStream) {
+        window.cameraStream.getTracks().forEach((track) => track.stop());
+        window.cameraStream = null;
+      }
 
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+      });
 
-    setAnswer("📷 Nexa pozerá cez kameru...");
+      window.cameraStream = stream;
 
-    const interval = setInterval(async () => {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      video.muted = true;
+      video.playsInline = true;
 
-      ctx.drawImage(video, 0, 0);
+      await video.play();
 
-      const image = canvas.toDataURL("image/jpeg");
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
 
-      const response = await fetch(
-        "https://TVOJ-BACKEND.onrender.com/vision",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            image,
-            question:
-              "Stručne povedz čo vidíš. Ak sa niečo mení, povedz to.",
-          }),
-        }
-      );
+      setAnswer("📷 Nexa pozerá cez kameru...");
+      setStatus("POZERÁM");
 
-      const data = await response.json();
+      const analyzeFrame = async () => {
+        if (!video.videoWidth || !video.videoHeight) return;
 
-      setAnswer(data.answer);
-    }, 4000);
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
 
-    window.cameraInterval = interval;
+        ctx.drawImage(video, 0, 0);
 
-  } catch (error) {
-    console.log(error);
-    setAnswer("Kamera zlyhala.");
-  }
-};
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.capture = "environment";
-
-    input.onchange = async () => {
-      const file = input.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-
-      reader.onloadend = async () => {
-        const base64Image = reader.result;
-
-        setStatus("POZERÁM");
-        setIsLoading(true);
-        setGeneratedImage(base64Image);
-        setAnswer("Pozerám sa na obrázok...");
+        const image = canvas.toDataURL("image/jpeg", 0.7);
 
         try {
           const response = await fetch(`${API_URL}/vision`, {
@@ -374,46 +357,46 @@ ${data.checks.mistral}
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              image: base64Image,
-              question: message || "Čo vidíš?",
+              image,
+              question:
+                message ||
+                "Stručne povedz po slovensky čo vidíš. Ak sa niečo mení, povedz to.",
             }),
           });
 
-          if (!response.ok) {
-            throw new Error("Vision backend error");
-          }
-
           const data = await response.json();
-          const finalAnswer =
-            data.answer || data.error || "Neviem rozoznať obrázok.";
 
-          setAnswer(finalAnswer);
-          setStatus("ONLINE");
-
-          setHistory((prev) => [
-            {
-              question: message || "Kamera",
-              answer: finalAnswer,
-              image: base64Image,
-              time: new Date().toLocaleTimeString(),
-            },
-            ...prev,
-          ]);
-
-          await speak(finalAnswer);
+          if (data.answer) {
+            setAnswer(data.answer);
+          }
         } catch (error) {
           console.log("Vision chyba:", error);
-          setStatus("CHYBA");
-          setAnswer("Chyba pri rozpoznávaní obrazu.");
         }
-
-        setIsLoading(false);
       };
 
-      reader.readAsDataURL(file);
-    };
+      await analyzeFrame();
 
-    input.click();
+      window.cameraInterval = setInterval(analyzeFrame, 5000);
+    } catch (error) {
+      console.log("Kamera chyba:", error);
+      setAnswer("Kamera zlyhala.");
+      setStatus("CHYBA");
+    }
+  };
+
+  const stopCamera = () => {
+    if (window.cameraInterval) {
+      clearInterval(window.cameraInterval);
+      window.cameraInterval = null;
+    }
+
+    if (window.cameraStream) {
+      window.cameraStream.getTracks().forEach((track) => track.stop());
+      window.cameraStream = null;
+    }
+
+    setStatus("ONLINE");
+    setAnswer("📷 Kamera zastavená.");
   };
 
   const startRecognition = () => {
@@ -525,10 +508,15 @@ ${data.checks.mistral}
           <button className="nav" onClick={saveMemory}>
             💾 Pamäť
           </button>
+
           <button className="nav" onClick={analyzeCamera}>
             📷 Kamera
           </button>
-         
+
+          <button className="nav" onClick={stopCamera}>
+            ⛔ Stop kamera
+          </button>
+
           <button className="nav">⚙ Nastavenie</button>
 
           <button className="nav" onClick={showHistory}>
@@ -536,17 +524,7 @@ ${data.checks.mistral}
           </button>
 
           <button className="nav">ℹ O Nexe</button>
-
-          <button
-                  className="action"
-                   onClick={() => {
-                    clearInterval(window.cameraInterval);
-                    setAnswer("📷 Kamera zastavená.");
-                   }}
-                   >
-                    Zastaviť kameru
-                  </button>
-                  </nav>
+        </nav>
 
         <div className="settingsPanel">
           <h3>Nastavenia AI</h3>
@@ -582,7 +560,7 @@ ${data.checks.mistral}
         <div className="statusBox">
           <div className="online">● {status}</div>
           <p>NEXA AI</p>
-          <small>v3.5</small>
+          <small>v3.6</small>
         </div>
       </aside>
 
@@ -651,6 +629,8 @@ ${data.checks.mistral}
           <button onClick={generateImage}>🎨 Obrázok</button>
 
           <button onClick={analyzeCamera}>📷 Kamera</button>
+
+          <button onClick={stopCamera}>⛔ Stop kamera</button>
 
           <button onClick={saveMemory}>💾 Pamäť</button>
 
