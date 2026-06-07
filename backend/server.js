@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const OpenAI = require("openai");
+const axios = require("axios");
 
 const app = express();
 
@@ -12,6 +13,109 @@ app.use(express.json({ limit: "50mb" }));
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+async function checkWithGemini(question, answer) {
+  try {
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        contents: [
+          {
+            parts: [
+              {
+                text: `
+Skontroluj túto odpoveď po slovensky.
+Ak je správna, napíš krátko "OK".
+Ak je nesprávna, oprav ju.
+
+Otázka:
+${question}
+
+Odpoveď:
+${answer}
+`,
+              },
+            ],
+          },
+        ],
+      }
+    );
+
+    return response.data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  } catch (error) {
+    return "Gemini kontrola zlyhala.";
+  }
+}
+
+async function checkWithDeepSeek(question, answer) {
+  try {
+    const response = await axios.post(
+      "https://api.deepseek.com/chat/completions",
+      {
+        model: "deepseek-chat",
+        messages: [
+          {
+            role: "user",
+            content: `
+Skontroluj túto odpoveď. Ak je správna, napíš OK. Ak nie, oprav ju.
+
+Otázka:
+${question}
+
+Odpoveď:
+${answer}
+`,
+          },
+        ],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    return response.data.choices?.[0]?.message?.content || "";
+  } catch (error) {
+    return "DeepSeek kontrola zlyhala.";
+  }
+}
+
+async function checkWithMistral(question, answer) {
+  try {
+    const response = await axios.post(
+      "https://api.mistral.ai/v1/chat/completions",
+      {
+        model: "mistral-small-latest",
+        messages: [
+          {
+            role: "user",
+            content: `
+Skontroluj túto odpoveď. Ak je správna, napíš OK. Ak nie, oprav ju.
+
+Otázka:
+${question}
+
+Odpoveď:
+${answer}
+`,
+          },
+        ],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    return response.data.choices?.[0]?.message?.content || "";
+  } catch (error) {
+    return "Mistral kontrola zlyhala.";
+  }
+}
 
 app.post("/ask", async (req, res) => {
   try {
@@ -25,26 +129,22 @@ app.post("/ask", async (req, res) => {
 
     const response = await client.responses.create({
       model: "gpt-4.1-mini",
-
       tools: [
         {
           type: "web_search",
           search_context_size: "medium",
         },
       ],
-
       tool_choice: "auto",
-
       input: [
         {
           role: "system",
           content: `
 Voláš sa Nexa.
-
 Si inteligentná technická AI asistentka.
 Rozprávaš po slovensky NESPISOVNE a prirodzene.
 
-Používaj normálny ľudový štýl:
+Používaj štýl:
 - čo zas nevíš
 - šak
 - nešpekuluj
@@ -52,11 +152,7 @@ Používaj normálny ľudový štýl:
 - ďe
 - bars aj
 
-Keď používateľ píše nespisovne,
-odpovedaj podobne.
-
-Buď technicky presná,
-ale nehovor príliš formálne.
+Buď technicky presná, ale nehovor príliš formálne.
 
 Humor: ${humor}%
 Sarkazmus: ${sarcasm}%
@@ -73,8 +169,54 @@ ${memory}
       ],
     });
 
+    const openAiAnswer = response.output_text || "Neviem čo chceš zas.";
+
+    const [gemini, deepseek, mistral] = await Promise.all([
+      checkWithGemini(message, openAiAnswer),
+      checkWithDeepSeek(message, openAiAnswer),
+      checkWithMistral(message, openAiAnswer),
+    ]);
+
+    const finalResponse = await client.responses.create({
+      model: "gpt-4.1-mini",
+      input: [
+        {
+          role: "system",
+          content: `
+Si Nexa. Vytvor finálnu odpoveď po slovensky.
+Použi hlavne pôvodnú odpoveď, ale oprav ju podľa kontrol od Gemini, DeepSeek a Mistral.
+Nepíš zbytočne, že si robila kontrolu, iba daj finálnu odpoveď.
+`,
+        },
+        {
+          role: "user",
+          content: `
+Otázka:
+${message}
+
+OpenAI odpoveď:
+${openAiAnswer}
+
+Gemini kontrola:
+${gemini}
+
+DeepSeek kontrola:
+${deepseek}
+
+Mistral kontrola:
+${mistral}
+`,
+        },
+      ],
+    });
+
     res.json({
-      answer: response.output_text || "Neviem čo chceš zas.",
+      answer: finalResponse.output_text || openAiAnswer,
+      checks: {
+        gemini,
+        deepseek,
+        mistral,
+      },
     });
   } catch (error) {
     console.log(error);
@@ -150,16 +292,13 @@ app.post("/vision", async (req, res) => {
 
     const response = await client.responses.create({
       model: "gpt-4.1-mini",
-
       input: [
         {
           role: "user",
           content: [
             {
               type: "input_text",
-              text:
-                question ||
-                "Popíš čo vidíš na obrázku po slovensky stručne.",
+              text: question || "Popíš čo vidíš na obrázku po slovensky stručne.",
             },
             {
               type: "input_image",
