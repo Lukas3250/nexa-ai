@@ -2,6 +2,7 @@ import "./App.css";
 import { useRef, useState } from "react";
 
 const API_URL = "https://nexa-ai-3iyw.onrender.com";
+const MAX_FREE_QUESTIONS = 10;
 
 function App() {
   const [message, setMessage] = useState("");
@@ -9,6 +10,11 @@ function App() {
   const [generatedImage, setGeneratedImage] = useState("");
   const [history, setHistory] = useState([]);
   const [status, setStatus] = useState("ONLINE");
+
+  // Počítadlo otázok zadarmo
+  const [usedQuestions, setUsedQuestions] = useState(() => {
+    return parseInt(localStorage.getItem("sara_used_questions")) || 0;
+  });
 
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -19,7 +25,7 @@ function App() {
   const [precision, setPrecision] = useState(95);
 
   const [memory, setMemory] = useState(() => {
-    return localStorage.getItem("nexa_memory") || "";
+    return localStorage.getItem("sara_memory") || "";
   });
 
   const recognitionRef = useRef(null);
@@ -27,6 +33,18 @@ function App() {
   const isSpeakingRef = useRef(false);
   const isLoadingRef = useRef(false);
   const shouldListenRef = useRef(false);
+
+  // Funkcia na kontrolu a navyšovanie počítadla správ
+  const incrementQuestionCount = () => {
+    if (usedQuestions >= MAX_FREE_QUESTIONS) {
+      alert("Vyčerpali ste limit 10 bezplatných otázok pre hostí. Pre ďalšie otázky sa prihláste.");
+      return false;
+    }
+    const nextCount = usedQuestions + 1;
+    setUsedQuestions(nextCount);
+    localStorage.setItem("sara_used_questions", nextCount);
+    return true;
+  };
 
   const resetMouth = () => {
     document.documentElement.style.setProperty("--mouth-height", "6px");
@@ -73,12 +91,12 @@ function App() {
   };
 
   const saveMemory = () => {
-    const newMemory = prompt("Čo si má Nexa zapamätať?");
+    const newMemory = prompt("Čo si má SARA zapamätať?");
     if (!newMemory) return;
 
     const updatedMemory = memory + "\n- " + newMemory;
 
-    localStorage.setItem("nexa_memory", updatedMemory);
+    localStorage.setItem("sara_memory", updatedMemory);
     setMemory(updatedMemory);
     setAnswer("Zapamätané.");
   };
@@ -182,6 +200,8 @@ function App() {
     if (isLoadingRef.current) return;
     if (isSpeakingRef.current) return;
 
+    if (!incrementQuestionCount()) return;
+
     isLoadingRef.current = true;
     setIsLoading(true);
     setStatus("PREMÝŠĽAM");
@@ -199,7 +219,7 @@ function App() {
           humor,
           sarcasm,
           precision,
-          memory: localStorage.getItem("nexa_memory") || "",
+          memory: localStorage.getItem("sara_memory") || "",
         }),
       });
 
@@ -210,25 +230,18 @@ function App() {
       const data = await response.json();
 
       const finalAnswer =
-        data.answer || "Technológia opäť zažila emocionálny kolaps.";
+        data.answer || "Systém nezachytil odpoveď.";
 
-      let checksText = "";
+     
+let checksText = "";
 
-      if (data.checks) {
-        checksText = `
+if (data.checks && data.checks.gemini) {
+  checksText = `
 
 -------------------
-
-🟢 Gemini:
-${data.checks.gemini}
-
-🔵 DeepSeek:
-${data.checks.deepseek}
-
-🟣 Mistral:
-${data.checks.mistral}
-`;
-      }
+🟢 Gemini kontrola:
+${data.checks.gemini}`;
+}
 
       setAnswer(finalAnswer + checksText);
 
@@ -259,6 +272,8 @@ ${data.checks.mistral}
       setAnswer("Najprv napíš, aký obrázok chceš vygenerovať.");
       return;
     }
+
+    if (!incrementQuestionCount()) return;
 
     setGeneratedImage("");
     setStatus("GENERUJEM OBRÁZOK");
@@ -310,6 +325,8 @@ ${data.checks.mistral}
   };
 
   const analyzeCamera = async () => {
+    if (!incrementQuestionCount()) return;
+
     try {
       if (window.cameraInterval) {
         clearInterval(window.cameraInterval);
@@ -337,7 +354,7 @@ ${data.checks.mistral}
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
 
-      setAnswer("📷 Nexa pozerá cez kameru...");
+      setAnswer("📷 SARA pozerá cez kameru...");
       setStatus("POZERÁM");
 
       const analyzeFrame = async () => {
@@ -360,19 +377,19 @@ ${data.checks.mistral}
               image,
               question:
                 message ||
-                "Stručne povedz po slovensky čo vidíš. Ak sa niečo mení, povedz to.",
+                "Stručne povedz po slovensky čo vidíš.",
             }),
           });
 
           const data = await response.json();
 
           if (data.answer) {
-  setAnswer(data.answer);
+            setAnswer(data.answer);
 
-  if (!isSpeakingRef.current) {
-    await speak(data.answer);
-  }
-}
+            if (!isSpeakingRef.current) {
+              await speak(data.answer);
+            }
+          }
         } catch (error) {
           console.log("Vision chyba:", error);
         }
@@ -438,16 +455,16 @@ ${data.checks.mistral}
       const lowerText = text.toLowerCase();
 
       if (
-        lowerText.includes("nexa") ||
-        lowerText.includes("neksa") ||
-        lowerText.includes("nexu") ||
-        lowerText.includes("hej nexa") ||
-        lowerText.includes("hey nexa")
+        lowerText.includes("sara") ||
+        lowerText.includes("sáre") ||
+        lowerText.includes("sáru") ||
+        lowerText.includes("hej sara") ||
+        lowerText.includes("hey sara")
       ) {
         stopAll();
         setMessage(text);
-        setAnswer("Čo zas nevíš?");
-        await speak("Čo zas nevíš?");
+        setAnswer("Počúvam vás, ako vám môžem pomôcť?");
+        await speak("Počúvam vás, ako vám môžem pomôcť?");
         return;
       }
 
@@ -527,7 +544,7 @@ ${data.checks.mistral}
             🕘 História
           </button>
 
-          <button className="nav">ℹ O Nexe</button>
+          <button className="nav">ℹ O SARA AI</button>
         </nav>
 
         <div className="settingsPanel">
@@ -563,7 +580,12 @@ ${data.checks.mistral}
 
         <div className="statusBox">
           <div className="online">● {status}</div>
-          <p>NEXA AI</p>
+          <p>SARA AI</p>
+
+          <div style={{ marginTop: "10px", fontSize: "12px", color: "#00E5FF" }}>
+            Otázky zadarmo: {usedQuestions} / {MAX_FREE_QUESTIONS}
+          </div>
+
           <small>v3.6</small>
         </div>
       </aside>
@@ -571,25 +593,39 @@ ${data.checks.mistral}
       <main className="main">
         <div className="topBar">
           <div>
-            <h1>NEXA</h1>
-            <p>TECHNICKÁ AI ASISTENTKA</p>
+            <h1>SARA</h1>
+            <p>TECHNICKÁ AI ASISTENTKA DSSYNERGY</p>
           </div>
         </div>
+{/* Malý pohyblivý robot SARA */}
+<div className={`robotContainer ${isSpeaking ? "speaking" : ""} ${isLoading ? "thinking" : ""}`}>
+  <svg width="120" height="120" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="saraRobot">
+    {/* Anténa so svietiacou guličkou */}
+    <line x1="50" y1="25" x2="50" y2="12" stroke="#00E5FF" strokeWidth="2" />
+    <circle cx="50" cy="10" r="4" fill="#00E5FF" className="antennaLight" />
 
-        <div className="visualizerWrapper">
-          <div
-            className={`nexaFaceWrapper ${isSpeaking ? "speaking" : ""} ${
-              isLoading ? "thinking" : ""
-            }`}
-          >
-            <div className="ring ring1"></div>
-            <div className="ring ring2"></div>
+    {/* Hlava robota */}
+    <rect x="25" y="25" width="50" height="35" rx="10" fill="#13171F" stroke="#00E5FF" strokeWidth="2" />
 
-            <img src="/nexa-icon.png" alt="Nexa" className="nexaFace" />
+    {/* Displej / Oči */}
+    <rect x="32" y="33" width="36" height="18" rx="5" fill="#0B0D10" />
+    <circle cx="41" cy="42" r="3.5" fill="#00E5FF" className="robotEye" />
+    <circle cx="59" cy="42" r="3.5" fill="#00E5FF" className="robotEye" />
 
-            <div className="mouth"></div>
-          </div>
-        </div>
+    {/* Úsmev / Status indikátor */}
+    <path d="M 42 47 Q 50 51 58 47" stroke="#00E5FF" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+
+    {/* Telo robota */}
+    <rect x="30" y="65" width="40" height="25" rx="8" fill="#13171F" stroke="#00E5FF" strokeWidth="1.5" />
+    
+    {/* Hrudný reaktor / Srdce robota */}
+    <circle cx="50" cy="77" r="5" fill="#00E5FF" className="robotCore" />
+
+    {/* Ruky robota */}
+    <path d="M 23 70 C 18 73 18 80 23 82" stroke="#00E5FF" strokeWidth="2" strokeLinecap="round" fill="none" className="robotArmLeft" />
+    <path d="M 77 70 C 82 73 82 80 77 82" stroke="#00E5FF" strokeWidth="2" strokeLinecap="round" fill="none" className="robotArmRight" />
+  </svg>
+</div>
 
         <section className="chatBox">
           <div className="userBubble">
@@ -597,13 +633,17 @@ ${data.checks.mistral}
           </div>
 
           <div className="aiRow">
-            <img src="/nexa-icon.png" alt="Nexa" className="smallLogo" />
+            {/* Malá SVG Ikona vedľa odpovede */}
+            <svg width="32" height="32" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="smallLogo">
+              <circle cx="50" cy="50" r="42" stroke="#00E5FF" strokeWidth="3" opacity="0.7"/>
+              <circle cx="50" cy="50" r="20" fill="#00E5FF"/>
+            </svg>
 
             <div className="aiBubble">
               <div className="aiText">
                 {answer && answer.length > 0
                   ? answer
-                  : "Čakám na problém. Dúfam, že nebude typu „nič som nemenil“."}
+                  : "Dobrý deň, som SARA. Ako vám môžem pomôcť s ponukou DSSYNERGY?"}
               </div>
 
               {generatedImage && (
@@ -618,21 +658,39 @@ ${data.checks.mistral}
         </section>
 
         <div className="inputArea">
-          <input
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Napíš správu alebo prompt na obrázok..."
+         
+  <input
+    value={message}
+    onChange={(e) => setMessage(e.target.value)}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        askAI();
+      }
+    }}
+    placeholder="Napíš správu pre SARU..."
+    disabled={usedQuestions >= MAX_FREE_QUESTIONS}
+  />
+
+  <button onClick={toggleListening} disabled={usedQuestions >= MAX_FREE_QUESTIONS}>
+    {isListening ? "⏹ Stop" : "🎤 Počúvať"}
+  </button>
           />
 
-          <button onClick={toggleListening}>
+          <button onClick={toggleListening} disabled={usedQuestions >= MAX_FREE_QUESTIONS}>
             {isListening ? "⏹ Stop" : "🎤 Počúvať"}
           </button>
 
-          <button onClick={() => askAI()}>Odoslať</button>
+          <button onClick={() => askAI()} disabled={usedQuestions >= MAX_FREE_QUESTIONS}>
+            Odoslať
+          </button>
 
-          <button onClick={generateImage}>🎨 Obrázok</button>
+          <button onClick={generateImage} disabled={usedQuestions >= MAX_FREE_QUESTIONS}>
+            🎨 Obrázok
+          </button>
 
-          <button onClick={analyzeCamera}>📷 Kamera</button>
+          <button onClick={analyzeCamera} disabled={usedQuestions >= MAX_FREE_QUESTIONS}>
+            📷 Kamera
+          </button>
 
           <button onClick={stopCamera}>⛔ Stop kamera</button>
 

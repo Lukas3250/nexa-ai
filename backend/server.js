@@ -1,326 +1,205 @@
-require("dotenv").config();
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import fetch from "node-fetch";
 
-const express = require("express");
-const cors = require("cors");
-const OpenAI = require("openai");
-const axios = require("axios");
+dotenv.config();
 
 const app = express();
-
 app.use(cors());
-app.use(express.json({ limit: "50mb" }));
+app.use(express.json({ limit: "20mb" })); // Zvýšený limit pre odosielanie fotiek z kamery
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const PORT = process.env.PORT || 5000;
 
-async function checkWithGemini(question, answer) {
-  try {
-    const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        contents: [
-          {
-            parts: [
-              {
-                text: `
-Skontroluj túto odpoveď po slovensky.
-Ak je správna, napíš krátko "OK".
-Ak je nesprávna, oprav ju.
-
-Otázka:
-${question}
-
-Odpoveď:
-${answer}
-`,
-              },
-            ],
-          },
-        ],
-      }
-    );
-
-    return response.data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  } catch (error) {
-    return "Gemini kontrola zlyhala.";
-  }
-}
-
-async function checkWithDeepSeek(question, answer) {
-  try {
-    const response = await axios.post(
-      "https://api.deepseek.com/chat/completions",
-      {
-        model: "deepseek-chat",
-        messages: [
-          {
-            role: "user",
-            content: `
-Skontroluj túto odpoveď. Ak je správna, napíš OK. Ak nie, oprav ju.
-
-Otázka:
-${question}
-
-Odpoveď:
-${answer}
-`,
-          },
-        ],
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    return response.data.choices?.[0]?.message?.content || "";
-  } catch (error) {
-    return "DeepSeek kontrola zlyhala.";
-  }
-}
-
-async function checkWithMistral(question, answer) {
-  try {
-    const response = await axios.post(
-      "https://api.mistral.ai/v1/chat/completions",
-      {
-        model: "mistral-small-latest",
-        messages: [
-          {
-            role: "user",
-            content: `
-Skontroluj túto odpoveď. Ak je správna, napíš OK. Ak nie, oprav ju.
-
-Otázka:
-${question}
-
-Odpoveď:
-${answer}
-`,
-          },
-        ],
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    return response.data.choices?.[0]?.message?.content || "";
-  } catch (error) {
-    return "Mistral kontrola zlyhala.";
-  }
-}
-
+// ----------------------------------------------------
+// 1. HLAVNÝ AI CHAT (OpenAI + Gemini Kontrola)
+// ----------------------------------------------------
 app.post("/ask", async (req, res) => {
   try {
-    const {
-      message,
-      humor = 60,
-      sarcasm = 40,
-      precision = 95,
-      memory = "",
-    } = req.body;
+    const { message, humor, sarcasm, precision, memory } = req.body;
 
-    const response = await client.responses.create({
-      model: "gpt-4.1-mini",
-      tools: [
-        {
-          type: "web_search",
-          search_context_size: "medium",
-        },
-      ],
-      tool_choice: "auto",
-      input: [
-        {
-          role: "system",
-          content: `
-Voláš sa Nexa.
-Si inteligentná technická AI asistentka.
-Rozprávaš po slovensky NESPISOVNE a prirodzene.
+    if (!message) {
+      return res.status(400).json({ error: "Správa nemôže byť prázdna." });
+    }
 
-Používaj štýl:
-- čo zas nevíš
-- šak
-- nešpekuluj
-- jak
-- ďe
-- bars aj
-
-Buď technicky presná, ale nehovor príliš formálne.
-
-Humor: ${humor}%
-Sarkazmus: ${sarcasm}%
-Presnosť: ${precision}%
-
-Pamäť:
-${memory}
-`,
-        },
-        {
-          role: "user",
-          content: message,
-        },
-      ],
-    });
-
-    const openAiAnswer = response.output_text || "Neviem čo chceš zas.";
-
-    const [gemini, deepseek, mistral] = await Promise.all([
-      checkWithGemini(message, openAiAnswer),
-      checkWithDeepSeek(message, openAiAnswer),
-      checkWithMistral(message, openAiAnswer),
-    ]);
-
-    const finalResponse = await client.responses.create({
-      model: "gpt-4.1-mini",
-      input: [
-        {
-          role: "system",
-          content: `
-Si Nexa. Vytvor finálnu odpoveď po slovensky.
-Použi hlavne pôvodnú odpoveď, ale oprav ju podľa kontrol od Gemini, DeepSeek a Mistral.
-Nepíš zbytočne, že si robila kontrolu, iba daj finálnu odpoveď.
-`,
-        },
-        {
-          role: "user",
-          content: `
-Otázka:
-${message}
-
-OpenAI odpoveď:
-${openAiAnswer}
-
-Gemini kontrola:
-${gemini}
-
-DeepSeek kontrola:
-${deepseek}
-
-Mistral kontrola:
-${mistral}
-`,
-        },
-      ],
-    });
-
-    res.json({
-      answer: finalResponse.output_text || openAiAnswer,
-      checks: {
-        gemini,
-        deepseek,
-        mistral,
+    // A) HLAVNÁ ODPOVEĎ (OpenAI GPT-4o-mini)
+    const openAiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
       },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `Si SARA, inteligentná technická AI asistentka pre firmu DSSYNERGY. 
+            Nastavenie tvojej osobnosti: Humor: ${humor || 50}%, Sarkazmus: ${sarcasm || 30}%, Presnosť: ${precision || 90}%.
+            Zapamätané informácie o používateľovi: ${memory || "žiadne"}.
+            Odpovedaj vecne, profesionálne, priateľsky a po slovensky.`
+          },
+          { role: "user", content: message }
+        ],
+      }),
     });
-  } catch (error) {
-    console.log(error);
 
+    const openAiData = await openAiResponse.json();
+    const mainAnswer = openAiData.choices?.[0]?.message?.content || "Nepodarilo sa získať odpoveď od OpenAI.";
+
+    // B) KONTROLA CEZ GEMINI (Gemini 1.5 Flash)
+    let geminiCheck = "";
+    try {
+      const geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `Skontroluj túto odpoveď na otázku "${message}":
+                
+Odpoveď: "${mainAnswer}"
+
+Ak je odpoveď správna a presná, napíš iba: "Odpoveď je v poriadku."
+Ak obsahuje faktickú chybu, stručne v jednej vete napíš opravenú informáciu.`
+              }]
+            }],
+          }),
+        }
+      );
+
+      const geminiData = await geminiResponse.json();
+      geminiCheck = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "Gemini bez pripomienok.";
+    } catch (gErr) {
+      console.error("Chyba Gemini kontroly:", gErr);
+      geminiCheck = "Gemini kontrola momentálne nedostupná.";
+    }
+
+    // Odoslanie výsledku späť do Reactu
     res.json({
-      answer: "Dakde nastala chyba. Skontroluj backend alebo API.",
+      answer: mainAnswer,
+      checks: {
+        gemini: geminiCheck
+      }
     });
+
+  } catch (error) {
+    console.error("Chyba servera (/ask):", error);
+    res.status(500).json({ error: "Chyba na strane servera pri spracovaní otázky." });
   }
 });
 
+// ----------------------------------------------------
+// 2. HLAS SARY (Text-To-Speech cez OpenAI)
+// ----------------------------------------------------
 app.post("/speak", async (req, res) => {
   try {
     const { text } = req.body;
 
-    const mp3 = await client.audio.speech.create({
-      model: "gpt-4o-mini-tts",
-      voice: "nova",
-      input: text,
-      speed: 1.15,
-      instructions: `
-Hovor po slovensky prirodzene.
-Používaj nespisovný štýl.
-Buď mierne sarkastická.
-Nehovor príliš formálne.
-`,
+    const response = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "tts-1",
+        input: text,
+        voice: "nova", // Ženský hlas (možno zmeniť na 'shimmer' alebo 'alloy')
+      }),
     });
 
-    const buffer = Buffer.from(await mp3.arrayBuffer());
+    if (!response.ok) {
+      throw new Error("Chyba TTS služby");
+    }
 
-    res.set({
-      "Content-Type": "audio/mpeg",
-      "Content-Length": buffer.length,
-    });
-
+    const buffer = await response.buffer();
+    res.set("Content-Type", "audio/mpeg");
     res.send(buffer);
   } catch (error) {
-    console.log(error);
-    res.status(500).send("Chyba hlasu.");
+    console.error("Chyba TTS hlasu:", error);
+    res.status(500).json({ error: "Chyba pri generovaní hlasu." });
   }
 });
 
+// ----------------------------------------------------
+// 3. GENEROVANIE OBRÁZKOV (DALL-E 3)
+// ----------------------------------------------------
 app.post("/generate-image", async (req, res) => {
   try {
     const { prompt } = req.body;
 
-    const image = await client.images.generate({
-      model: "gpt-image-1",
-      prompt,
-      size: "1024x1024",
+    const response = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "dall-e-3",
+        prompt: prompt,
+        n: 1,
+        size: "1024x1024",
+      }),
     });
 
-    res.json({
-      image: `data:image/png;base64,${image.data[0].b64_json}`,
-    });
+    const data = await response.json();
+
+    if (data.data && data.data[0]?.url) {
+      res.json({ image: data.data[0].url });
+    } else {
+      res.status(500).json({ error: "Nepodarilo sa vygenerovať obrázok." });
+    }
   } catch (error) {
-    console.log(error);
-
-    res.json({
-      error: "Obrázok sa nepodarilo vytvoriť.",
-    });
+    console.error("Chyba pri generovaní obrázka:", error);
+    res.status(500).json({ error: "Chyba servera pri vytváraní obrázka." });
   }
 });
 
+// ----------------------------------------------------
+// 4. ANALÝZA KAMERY / OBRÁZKOV (GPT-4o Vision)
+// ----------------------------------------------------
 app.post("/vision", async (req, res) => {
   try {
     const { image, question } = req.body;
 
-    if (!image) {
-      return res.status(400).json({
-        error: "Chýba obrázok.",
-      });
-    }
-
-    const response = await client.responses.create({
-      model: "gpt-4.1-mini",
-      input: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: question || "Popíš čo vidíš na obrázku po slovensky stručne.",
-            },
-            {
-              type: "input_image",
-              image_url: image,
-            },
-          ],
-        },
-      ],
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: question || "Stručne popíš po slovensky, čo vidíš na tomto obrázku." },
+              {
+                type: "image_url",
+                image_url: { url: image },
+              },
+            ],
+          },
+        ],
+        max_tokens: 300,
+      }),
     });
 
-    res.json({
-      answer: response.output_text,
-    });
+    const data = await response.json();
+    const answer = data.choices?.[0]?.message?.content || "Kamera nič nezachytila.";
+
+    res.json({ answer });
   } catch (error) {
-    console.log(error);
-
-    res.status(500).json({
-      error: "Vision chyba.",
-    });
+    console.error("Vision chyba:", error);
+    res.status(500).json({ error: "Chyba pri analýze obrazu." });
   }
 });
 
-app.listen(3001, () => {
-  console.log("Nexa backend beží na porte 3001");
+// Spustenie servera
+app.listen(PORT, () => {
+  console.log(`🚀 SARA Backend beží na porte ${PORT}`);
 });
